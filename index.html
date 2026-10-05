@@ -110,6 +110,7 @@ textarea{min-height:60px;resize:vertical}
 .finding.risk{border-left-color:var(--red)}
 .finding.neutral{border-left-color:var(--amber)}
 .finding.positive{border-left-color:var(--green)}
+.finding.caveat{border-left-color:var(--teal)}
 .finding-text{font-size:13px;color:var(--text-dim);line-height:1.5}
 
 /* Reset */
@@ -264,7 +265,7 @@ textarea{min-height:60px;resize:vertical}
     <div class="check-item" onclick="toggleCheck(this)" data-risk="constitutional"><div class="check-box">✓</div><div class="check-text">Constitutional amendment (can't be repealed by legislature)</div></div>
     <div class="check-item" onclick="toggleCheck(this)" data-risk="no_oversight"><div class="check-box">✓</div><div class="check-text">No independent oversight/audit mechanism</div></div>
     <div class="check-item" onclick="toggleCheck(this)" data-risk="counter_initiatives"><div class="check-box">✓</div><div class="check-text">Counter-initiatives filed to confuse voters</div></div>
-    <div class="check-item" onclick="toggleCheck(this)" data-risk="industry_benefit"><div class="check-box">✓</div><div class="check-text">Top funder directly benefits from passage</div></div>
+    <div class="check-item" onclick="toggleCheck(this)" data-risk="industry_benefit"><div class="check-box">✓</div><div class="check-text">Top funder directly benefits from the outcome (pass OR fail)</div></div>
     <div class="check-item" onclick="toggleCheck(this)" data-risk="rushed_timeline"><div class="check-box">✓</div><div class="check-text">Rushed signature gathering / expedited timeline</div></div>
     <div class="check-item" onclick="toggleCheck(this)" data-risk="dark_money"><div class="check-box">✓</div><div class="check-text">Funding routed through intermediary organizations</div></div>
     <div class="check-item" onclick="toggleCheck(this)" data-risk="misleading_title"><div class="check-box">✓</div><div class="check-text">Ballot title doesn't match full measure text</div></div>
@@ -360,6 +361,7 @@ function runAssessment(){
   const topDonor=getNum('topDonorAmount');
   const oppTotal=getNum('oppositionTotal');
   const oppDonors=getNum('oppositionDonors');
+  const topOpp=getNum('topOppAmount');
   const pollSup=getNum('pollSupport');
   const pollOpp=getNum('pollOppose');
   const flags=getChecked();
@@ -368,13 +370,15 @@ function runAssessment(){
 
   // DIMENSION SCORING (0-100 each, higher = more concern)
 
-  // 1. Funding Concentration
-  let fundingScore=0;
-  if(supportTotal>0&&topDonor>0){
-    const concentration=topDonor/supportTotal;
-    fundingScore=Math.min(100,Math.round(concentration*120));
-  }
-  if(flags.includes('funding_concentration'))fundingScore=Math.min(100,fundingScore+15);
+  // 1. Funding Concentration — checks BOTH sides, scores off whichever is more concentrated
+  let supportConcentration=0, oppConcentration=0;
+  if(supportTotal>0&&topDonor>0){supportConcentration=topDonor/supportTotal;}
+  if(oppTotal>0&&topOpp>0){oppConcentration=topOpp/oppTotal;}
+  const maxConcentration=Math.max(supportConcentration,oppConcentration);
+  const concentrationSide=oppConcentration>supportConcentration?'opposition':'support';
+  let fundingScore=Math.round(maxConcentration*120);
+  if(flags.includes('funding_concentration'))fundingScore+=15;
+  fundingScore=Math.min(100,fundingScore);
 
   // 2. Spending Imbalance
   let spendingScore=0;
@@ -474,19 +478,27 @@ function runAssessment(){
   // Summary cards
   const ratio=oppTotal>0?((supportTotal/oppTotal).toFixed(1)+':1'):(supportTotal>0?'∞:1':'N/A');
   document.getElementById('sum-ratio').textContent=ratio;
-  const conc=supportTotal>0?Math.round((topDonor/supportTotal)*100)+'%':'N/A';
+  const conc=maxConcentration>0?Math.round(maxConcentration*100)+'% ('+concentrationSide+')':'N/A';
   document.getElementById('sum-concentration').textContent=conc;
   document.getElementById('sum-flags').textContent=flags.length+'/12';
 
   // Findings
   const findings=[];
-  if(fundingScore>50)findings.push({type:'risk',text:`Funding concentration is ${Math.round(topDonor/supportTotal*100)}%. The top donor (${getVal('topDonorName')||'unnamed'}) provides a disproportionate share of total support funding.`});
+  if(fundingScore>50){
+    const sideDonorCount=concentrationSide==='opposition'?oppDonors:supportDonors;
+    const sideDonorName=concentrationSide==='opposition'?getVal('topOppName'):getVal('topDonorName');
+    findings.push({type:'risk',text:`Funding concentration is ${Math.round(maxConcentration*100)}% on the ${concentrationSide} side (top donor: ${sideDonorName||'unnamed'}).`});
+    if(sideDonorCount>0&&sideDonorCount<=2){
+      findings.push({type:'caveat',text:`This is based on only ${sideDonorCount} disclosed donor(s) on the ${concentrationSide} side. If the full committee total isn't captured, this concentration figure is likely overstated — verify the complete donor list via CAL-ACCESS before treating it as final.`});
+    }
+  }
   if(spendingScore>50)findings.push({type:'risk',text:`Support-to-opposition spending ratio is ${ratio}. A severe imbalance suggests one side is outspending the other with minimal organized resistance in the public record.`});
   if(transparencyScore>40)findings.push({type:'risk',text:`Transparency flags detected: ${[flags.includes('dark_money')?'intermediary funding':'',flags.includes('misleading_title')?'title mismatch':'',flags.includes('fine_print')?'buried provisions':'',flags.includes('counter_initiatives')?'counter-initiatives':''].filter(Boolean).join(', ')}. Review the full measure text against the voter guide summary.`});
-  if(conflictScore>40)findings.push({type:'risk',text:`Conflict of interest indicators present. The top funder appears to directly benefit from passage${getVal('topDonorIndustry')?' ('+getVal('topDonorIndustry')+' sector)':''}.`});
+  if(conflictScore>40)findings.push({type:'risk',text:`Conflict of interest indicators present. The top funder appears to directly benefit from the outcome — whether the measure passes or fails${getVal('topDonorIndustry')?' ('+getVal('topDonorIndustry')+' sector)':''}.`});
   if(structuralScore>40)findings.push({type:'neutral',text:`Structural concerns: ${[flags.includes('constitutional')?'constitutional amendment (irreversible by legislature)':'',flags.includes('no_oversight')?'no independent oversight':'',flags.includes('rushed_timeline')?'rushed timeline':''].filter(Boolean).join(', ')}.`});
   if(pollSup>0&&pollSup>=50)findings.push({type:'positive',text:`Polling shows ${pollSup}% support${getVal('pollSource')?' ('+getVal('pollSource')+')':''}. Above the 50% threshold needed for passage.`});
   if(pollSup>0&&pollSup<50)findings.push({type:'neutral',text:`Polling shows ${pollSup}% support — below the 50% threshold. California's historical initiative passage rate is 35.5%.`});
+  if(pollSup>0&&pollOpp===0)findings.push({type:'caveat',text:`Only the support percentage was entered (${pollSup}%) with no opposition number. The missing share isn't necessarily "oppose" — it may include undecided voters. Enter both figures from the same poll for an accurate margin.`});
   if(flags.length===0)findings.push({type:'positive',text:'No risk indicators were flagged. This measure shows a clean public record profile based on the data provided.'});
 
   document.getElementById('findings').innerHTML=findings.map(f=>`<div class="finding ${f.type}"><div class="finding-text">${f.text}</div></div>`).join('');
