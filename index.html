@@ -127,6 +127,18 @@ textarea{min-height:60px;resize:vertical}
 .footer-links a:hover{color:var(--amber)}
 .footer-copy{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--text-muted)}
 
+/* Share */
+.share-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.share-btn{padding:12px 8px;background:transparent;border:1px solid var(--teal);color:var(--teal);font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer;transition:all 0.3s}
+.share-btn:hover{background:var(--teal-glow)}
+.share-btn.done{border-color:var(--green);color:var(--green)}
+.share-note{font-size:12px;color:var(--text-muted);margin-top:10px;line-height:1.5}
+.preset-row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;align-items:center}
+.preset-btn{padding:8px 12px;background:transparent;border:1px dashed var(--amber);color:var(--amber);font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:1.5px;text-transform:uppercase;cursor:pointer}
+.preset-btn:hover{background:var(--amber-glow)}
+.preset-note{font-size:12px;color:var(--text-muted)}
+@media(max-width:600px){.share-row{grid-template-columns:1fr}}
+
 @media(max-width:600px){
   .row-2,.row-3{grid-template-columns:1fr}
   .check-grid{grid-template-columns:1fr}
@@ -135,6 +147,9 @@ textarea{min-height:60px;resize:vertical}
   .gauge-score{font-size:48px}
 }
 </style>
+<meta property="og:title" content="Proposition Due Diligence Tool | The Frequency Framework">
+<meta property="og:description" content="Score any California ballot measure across six dimensions using public record data. Who's paying, who benefits, what the filings show.">
+<meta name="twitter:card" content="summary">
 </head>
 <body>
 
@@ -150,6 +165,11 @@ textarea{min-height:60px;resize:vertical}
 
 <!-- INPUT SECTION -->
 <div id="inputSection">
+
+<div class="preset-row">
+  <button class="preset-btn" onclick="loadPreset('prop40')">Load example: Prop 40 (filings-only)</button>
+  <span class="preset-note">Pre-fills documented figures from CA SOS Power Search. You can change any field.</span>
+</div>
 
 <div class="section">
   <div class="section-label">Measure Identification</div>
@@ -313,6 +333,16 @@ textarea{min-height:60px;resize:vertical}
 </div>
 
 <div class="section">
+  <div class="section-label">Share This Result</div>
+  <div class="share-row">
+    <button class="share-btn" id="btnLink" onclick="copyShare('link',this)">Copy Link</button>
+    <button class="share-btn" id="btnSummary" onclick="copyShare('summary',this)">Copy Summary</button>
+    <button class="share-btn" id="btnX" onclick="copyShare('x',this)">Copy for X</button>
+  </div>
+  <div class="share-note">The link reopens this exact scorecard with the same inputs. Nothing is stored or sent anywhere: the inputs live in the link itself.</div>
+</div>
+
+<div class="section">
   <div class="section-label">Key Findings</div>
   <div id="findings"></div>
 </div>
@@ -352,6 +382,7 @@ textarea{min-height:60px;resize:vertical}
 function toggleCheck(el){el.classList.toggle('active')}
 
 function getVal(id){return document.getElementById(id).value}
+function esc(t){return String(t).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function getNum(id){return parseFloat(document.getElementById(id).value)||0}
 function getChecked(){return Array.from(document.querySelectorAll('.check-item.active')).map(e=>e.dataset.risk)}
 
@@ -486,7 +517,7 @@ function runAssessment(){
   const findings=[];
   if(fundingScore>50){
     const sideDonorCount=concentrationSide==='opposition'?oppDonors:supportDonors;
-    const sideDonorName=concentrationSide==='opposition'?getVal('topOppName'):getVal('topDonorName');
+    const sideDonorName=esc(concentrationSide==='opposition'?getVal('topOppName'):getVal('topDonorName'));
     findings.push({type:'risk',text:`Funding concentration is ${Math.round(maxConcentration*100)}% on the ${concentrationSide} side (top donor: ${sideDonorName||'unnamed'}).`});
     if(sideDonorCount>0&&sideDonorCount<=2){
       findings.push({type:'caveat',text:`This is based on only ${sideDonorCount} disclosed donor(s) on the ${concentrationSide} side. If the full committee total isn't captured, this concentration figure is likely overstated — verify the complete donor list via CAL-ACCESS before treating it as final.`});
@@ -494,9 +525,9 @@ function runAssessment(){
   }
   if(spendingScore>50)findings.push({type:'risk',text:`Support-to-opposition spending ratio is ${ratio}. A severe imbalance suggests one side is outspending the other with minimal organized resistance in the public record.`});
   if(transparencyScore>40)findings.push({type:'risk',text:`Transparency flags detected: ${[flags.includes('dark_money')?'intermediary funding':'',flags.includes('misleading_title')?'title mismatch':'',flags.includes('fine_print')?'buried provisions':'',flags.includes('counter_initiatives')?'counter-initiatives':''].filter(Boolean).join(', ')}. Review the full measure text against the voter guide summary.`});
-  if(conflictScore>40)findings.push({type:'risk',text:`Conflict of interest indicators present. The top funder appears to directly benefit from the outcome — whether the measure passes or fails${getVal('topDonorIndustry')?' ('+getVal('topDonorIndustry')+' sector)':''}.`});
+  if(conflictScore>40)findings.push({type:'risk',text:`Conflict of interest indicators present. The top funder appears to directly benefit from the outcome — whether the measure passes or fails${getVal('topDonorIndustry')?' ('+esc(getVal('topDonorIndustry'))+' sector)':''}.`});
   if(structuralScore>40)findings.push({type:'neutral',text:`Structural concerns: ${[flags.includes('constitutional')?'constitutional amendment (irreversible by legislature)':'',flags.includes('no_oversight')?'no independent oversight':'',flags.includes('rushed_timeline')?'rushed timeline':''].filter(Boolean).join(', ')}.`});
-  if(pollSup>0&&pollSup>=50)findings.push({type:'positive',text:`Polling shows ${pollSup}% support${getVal('pollSource')?' ('+getVal('pollSource')+')':''}. Above the 50% threshold needed for passage.`});
+  if(pollSup>0&&pollSup>=50)findings.push({type:'positive',text:`Polling shows ${pollSup}% support${getVal('pollSource')?' ('+esc(getVal('pollSource'))+')':''}. Above the 50% threshold needed for passage.`});
   if(pollSup>0&&pollSup<50)findings.push({type:'neutral',text:`Polling shows ${pollSup}% support — below the 50% threshold. California's historical initiative passage rate is 35.5%.`});
   if(pollSup>0&&pollOpp===0)findings.push({type:'caveat',text:`Only the support percentage was entered (${pollSup}%) with no opposition number. The missing share isn't necessarily "oppose" — it may include undecided voters. Enter both figures from the same poll for an accurate margin.`});
   if(flags.length===0)findings.push({type:'positive',text:'No risk indicators were flagged. This measure shows a clean public record profile based on the data provided.'});
@@ -505,7 +536,7 @@ function runAssessment(){
 
   // Next steps
   const steps=[];
-  steps.push({type:'neutral',text:`Search CAL-ACCESS for "${measureName}" committee filings. Cross-reference donor names against FPPC Form 460 reports.`});
+  steps.push({type:'neutral',text:`Search CAL-ACCESS for "${esc(measureName)}" committee filings. Cross-reference donor names against FPPC Form 460 reports.`});
   if(flags.includes('dark_money'))steps.push({type:'risk',text:'Trace intermediary organizations. Search for parent organizations, shared addresses, or common officers across committee filings.'});
   if(flags.includes('industry_benefit'))steps.push({type:'risk',text:`Investigate the top funder's business interests. Do they stand to gain contracts, regulatory advantages, or tax benefits from passage?`});
   steps.push({type:'neutral',text:'Read the FULL measure text — not the voter guide summary. Compare what the title says vs what the implementation language requires.'});
@@ -514,6 +545,7 @@ function runAssessment(){
 
   document.getElementById('nextSteps').innerHTML=steps.map(s=>`<div class="finding ${s.type}"><div class="finding-text">${s.text}</div></div>`).join('');
 
+  window.lastResult={name:measureName,overall,grade,ratio,conc,flagsN:flags.length,dims:dims.map(d=>d.id+' '+d.score).join(' · ')};
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
@@ -525,6 +557,63 @@ function resetTool(){
   document.querySelectorAll('.check-item').forEach(el=>el.classList.remove('active'));
   window.scrollTo({top:0,behavior:'smooth'});
 }
+
+const PARAM_MAP={n:'measureName',t:'measureType',e:'electionDate',d:'measureDesc',st:'supportTotal',sd:'supportDonors',ta:'topDonorAmount',tn:'topDonorName',ti:'topDonorIndustry',ot:'oppositionTotal',od:'oppositionDonors',oa:'topOppAmount',on:'topOppName',ps:'pollSupport',po:'pollOppose',pso:'pollSource'};
+const VALID_FLAGS=Array.from(document.querySelectorAll('.check-item')).map(e=>e.dataset.risk);
+
+// Presets use documented, primary-source figures only (no judgment-call flags).
+const PRESETS={
+  prop40:{n:'Prop 40 (Billionaire Tax)',t:'constitutional',e:'2026-11',
+    d:'Constitutional amendment taxing billionaires. Figures: direct Prop 40 committee money per CA SOS Power Search (electronic filings through Oct 2, 2026).',
+    st:32792187,ta:31788563,tn:'SEIU-UHW entities',ti:'Healthcare labor',
+    ot:99800000,oa:88500000,on:'Building a Better California',
+    ps:52,pso:'CalMatters',f:['funding_concentration','dark_money','constitutional']}
+};
+
+function setField(id,v){const el=document.getElementById(id);if(!el)return;
+  if(el.tagName==='SELECT'){if(Array.from(el.options).some(o=>o.value===String(v)))el.value=String(v);}
+  else el.value=v;}
+
+function applyData(data){
+  Object.keys(PARAM_MAP).forEach(k=>{if(data[k]!==undefined&&data[k]!=='')setField(PARAM_MAP[k],data[k]);});
+  document.querySelectorAll('.check-item').forEach(el=>el.classList.remove('active'));
+  (data.f||[]).forEach(r=>{if(VALID_FLAGS.includes(r)){const el=document.querySelector('[data-risk="'+r+'"]');if(el)el.classList.add('active');}});
+}
+
+function loadPreset(key){const pr=PRESETS[key];if(!pr)return;applyData(pr);window.scrollTo({top:document.body.scrollHeight,behavior:'smooth'});}
+
+function buildShareURL(){
+  const p=new URLSearchParams();
+  Object.keys(PARAM_MAP).forEach(k=>{let v=getVal(PARAM_MAP[k]).trim();if(v){if(k==='d')v=v.slice(0,400);p.set(k,v);}});
+  const f=getChecked();if(f.length)p.set('f',f.join(','));
+  return location.href.split('#')[0].split('?')[0]+'?'+p.toString();
+}
+
+function copyText(text,btn,label){
+  const done=()=>{const old=btn.textContent;btn.textContent='Copied ✓';btn.classList.add('done');setTimeout(()=>{btn.textContent=label;btn.classList.remove('done')},1800)};
+  if(navigator.clipboard&&window.isSecureContext){navigator.clipboard.writeText(text).then(done).catch(()=>fallbackCopy(text,done));}
+  else fallbackCopy(text,done);
+}
+function fallbackCopy(text,cb){const ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');cb()}catch(e){window.prompt('Copy this:',text)}document.body.removeChild(ta);}
+
+function copyShare(kind,btn){
+  const r=window.lastResult;if(!r)return;
+  const url=buildShareURL();
+  const labels={link:'Copy Link',summary:'Copy Summary',x:'Copy for X'};
+  let text;
+  if(kind==='link')text=url;
+  else if(kind==='x')text=r.name+': '+r.overall+'/100, '+r.grade+'. Scored with The Frequency Framework\'s Proposition Due Diligence Tool, using public filings.\n'+url;
+  else text='PROPOSITION DUE DILIGENCE: '+r.name+'\nScore: '+r.overall+'/100 ('+r.grade+')\nSupport/Opposition ratio: '+r.ratio+' | Top-donor concentration: '+r.conc+' | Risk flags: '+r.flagsN+'/12\nDimensions: '+r.dims+'\nBased on figures entered by the user from public records. Verify at powersearch.sos.ca.gov.\nScored with The Frequency Framework\'s Proposition Due Diligence Tool: '+url;
+  copyText(text,btn,labels[kind]);
+}
+
+// Open a shared link: pre-fill from URL and score automatically.
+(function(){
+  const q=new URLSearchParams(location.search);if(![...q.keys()].length)return;
+  if(q.get('p')&&PRESETS[q.get('p')]){applyData(PRESETS[q.get('p')]);}
+  else{const data={};Object.keys(PARAM_MAP).forEach(k=>{if(q.has(k))data[k]=q.get(k)});data.f=(q.get('f')||'').split(',').filter(Boolean);applyData(data);}
+  runAssessment();
+})();
 </script>
 
 </body>
